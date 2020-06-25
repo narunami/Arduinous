@@ -74,7 +74,7 @@ int sunrise = 17;
 int sunset = 8;
 
 // Light status variable - set when lights (transistor) are turned on or off;
-// functions check thet status of this variable before they change the light status - no need to change the pin value every second.
+// functions check the status of this variable before they change the light status - no need to change the pin value every second.
 
 bool lightStatus = false;
 
@@ -181,12 +181,12 @@ void setup()
 
   for (int i=0; i<ledCount; i++) { // Configure Fire Effect pins.
     pinMode(ledFire[i], OUTPUT);
-    DEBUG_PORT.print( F("Set pin to OUTPUT: ") );
+    DEBUG_PORT.print( F("Fire Effect: Set pin to OUTPUT: ") );
     DEBUG_PORT.println(ledFire[i]);
   }
   
   pinMode(daytimeLights, OUTPUT); // Configure transistor lights pin.
-  DEBUG_PORT.print( F("Set pin to OUTPUT: ") );
+  DEBUG_PORT.print( F("Daytime Lights:  Set pin to OUTPUT: ") );
   DEBUG_PORT.println(daytimeLights);
 
   DEBUG_PORT.print( F("NMEA.INO: started\n") );
