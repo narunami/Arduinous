@@ -1,13 +1,9 @@
-[code]
 #include <NMEAGPS.h>
-//#include <AltSoftSerial.h>
-//#include <NMEAGPS_cfg.h>
 
 #include <AltSoftSerial.h>
 
-
 #include <GPSport.h>
-#include <Time.h>
+#include <time.h>
 
 //------------------------------------------------------------
 // For the NeoGPS example programs, "Streamers" is common set
@@ -33,32 +29,98 @@ static gps_fix fix;
 
 // Initialise LED Fire Effect pins
 
+/*
 int ledPin1 = 10;
 int ledPin2 = 6;
 int ledPin3 = 11;
 int ledPin4 = 5;
+*/
 
+int ledFire[] = {5,6,10,11};
+int ledCount = 4;
+
+// Initialise outdoor lighting
+
+int daytimeLights = 13;
+
+// set sunset and sunrise hours (int, 0 - 23)
+
+int sunrise = 7;
+int sunset = 18;
+
+// light status variable - used by a few functions
+bool lightStatus = false;
+
+// should lights be turned on or off.
+bool lightsOn;
+
+// Don't think we're using this; belive pins 2+3 are default tx,rx
 //AltSoftSerial gpsPort; // GPS TX to pin 8, GPS RX to pin 9
 
 static void flickerCandles () 
 {
-  analogWrite(ledPin1, random(120)+135);
+  /*analogWrite(ledPin1, random(120)+135);
   analogWrite(ledPin2, random(120)+135);
   analogWrite(ledPin3, random(120)+135);
-  analogWrite(ledPin4, random(120)+135);
-  DEBUG_PORT.print( F("I just did a flicker") );
-  //do flicker stuff
+  analogWrite(ledPin4, random(120)+135);*/
+  for (int i=0; i<ledCount; i++) {
+    analogWrite(ledFire[i], random(120)+135);
+    DEBUG_PORT.print( F("I just flickered Pin") );
+    DEBUG_PORT.println(ledFire[i]);
+  }
+  DEBUG_PORT.print( F("I just finished the flicker loop") );
+  // do this more elegantly. Function pointer in a for loop for each pin?
 }
 
-static void switchLight (bool lightsOn)
+static void switchDaytimeLight (bool lightsOn)
 {
   if (lightsOn == true) {
     //turn on transistor lights
+    digitalWrite(daytimeLights, HIGH); // pull pin high to power transistor
+    lightStatus = true;
     DEBUG_PORT.print( F("Transistor Lights: On") );
   }
   if (lightsOn == false) {
     //turn off transistor lights
+    digitalWrite(daytimeLights, LOW); // pull pin low to cut power to transistor circuit
+    lightStatus = false;
     DEBUG_PORT.print( F("Transistor Lights: Off") );
+  }
+}
+
+static void killCandles ()
+{
+  for (int i=0; i<ledCount; i++) {
+    digitalWrite(ledFire[i], LOW); // pull pin low to kill power to LED.
+    DEBUG_PORT.print( F("I just killed power to") );
+    DEBUG_PORT.println(ledFire[i]);
+ }
+}
+
+static void doLights ()
+{
+  uint8_t currentHour = 2; //THIS IS FOR DEBUGGING. Remove to get time from GPS.
+  if ( currentHour < sunrise || currentHour >= sunset ) {
+    flickerCandles();
+    if ( lightStatus == false ) {
+      lightsOn = true;
+      switchDaytimeLight(lightsOn);
+      DEBUG_PORT.println( F("Turning Lights On") );
+    }
+    else {
+      DEBUG_PORT.println( F("Lights already on") );
+    }
+  }
+  else {
+    if ( lightStatus == true ) {
+      lightsOn = false;
+      killCandles();
+      switchDaytimeLight (lightsOn);
+      DEBUG_PORT.print( F("Lights: Off") );
+    }
+    else {
+      DEBUG_PORT.print( F("Lights already off") );
+    }
   }
 }
 
@@ -73,19 +135,7 @@ static void switchLight (bool lightsOn)
 static void doSomeWork()
 {
   //uint8_t currentHour = fix.dateTime.hours;
-  uint8_t currentHour = 2;
-  if ( currentHour < 7 || currentHour > 18) {
-    bool lightsOn = true;
-    flickerCandles();
-    switchLight(lightsOn);
-    DEBUG_PORT.println( F("Lights Off") );
-  }
-  else {
-    bool lightsOn = false;
-    switchLight (lightsOn);
-    //candles will still be on until they're turned off.
-    DEBUG_PORT.print( F("Lights: Off") );
-  }
+  doLights(); // this is called once per second and currently only flickers candles once in that time.
   trace_all( DEBUG_PORT, gps, fix );
 
 } // doSomeWork
@@ -105,10 +155,19 @@ static void GPSloop()
 void setup()
 {
   //configure candle flicker pins
+  /*
   pinMode(ledPin1, OUTPUT);
   pinMode(ledPin2, OUTPUT);
   pinMode(ledPin3, OUTPUT);
   pinMode(ledPin4, OUTPUT);
+  */
+  for (int i=0; i<ledCount; i++) {
+    pinMode(ledFire[i], OUTPUT);
+    DEBUG_PORT.print( F("Set pin to OUTPUT:") );
+    DEBUG_PORT.println(ledFire[i]);
+  }
+  
+  pinMode(daytimeLights, OUTPUT);
 
   DEBUG_PORT.begin(9600);
   while (!DEBUG_PORT)
@@ -160,4 +219,3 @@ void setup()
 void loop() {
   GPSloop();
 }
-[/code]
