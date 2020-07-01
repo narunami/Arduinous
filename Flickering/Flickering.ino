@@ -1,7 +1,33 @@
+/*
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * 
+ * Copyright 2020 Matt & Katy Jolly 
+*/
+
+/*
+ * Flickering v0.2
+ * Arduino sketch to control the the lights for a book nook. 
+ * Provides a configurable number of PWM outputs with a 'flickering' effect for candles burning after sunset
+ * and 'daylight' lights (to stream light through windows) controlled via a transistor attached to a digital output.
+ * 
+ * Time information is provided by NeoGPS using AltSoftSerial on pins 8 (gps TX) and 9 (gps RX); stored in the gps fix.
+ * all light control functions are performed in the time between NMEA sentences (approx 1 second).
+ *  
+*/
+
 #include <NMEAGPS.h>
-
 #include <AltSoftSerial.h>
-
 #include <GPSport.h>
 #include <time.h>
 
@@ -14,62 +40,56 @@
 
 #include <Streamers.h>
 
-//------------------------------------------------------------
-// This object parses received characters
-//   into the gps.fix() data structure
+/*
+ * Create an object to parse received characters 
+ * into the gps.fix() data structure
+*/
 
 static NMEAGPS gps;
 
-//------------------------------------------------------------
-//  Define a set of GPS fix information.  It will
-//  hold on to the various pieces as they are received from
-//  an RMC sentence.  It can be used anywhere in your sketch.
+/*
+ * Define a set of GPS fix information to hold things as they're received from an RMC sentence.
+ * Call this anywhere in your sketch.
+*/
 
 static gps_fix fix;
 
-// Initialise LED Fire Effect pins
-
-/*
-int ledPin1 = 10;
-int ledPin2 = 6;
-int ledPin3 = 11;
-int ledPin4 = 5;
+/* 
+ *  Initialise LED Fire Effect pins
+ *  Additional pins may be added to the ledFire array to be initialised and handled automatically - ensure that only PWM pins are used.
+ *  The ledCount must be equal to the number of pins that the Fire effect is to run on.
 */
 
 int ledFire[] = {5,6,10,11};
 int ledCount = 4;
 
-// Initialise outdoor lighting
+// Initialise outdoor lighting (circuit controlled via transistor; ON = HIGH/LOW???)
 
-int daytimeLights = 13;
+int daytimeLights = 12;
 
 // set sunset and sunrise hours (int, 0 - 23)
+// note that this needs to be in GMT!
 
-int sunrise = 7;
-int sunset = 18;
+int sunrise = 17;
+int sunset = 8;
 
-// light status variable - used by a few functions
+// Light status variable - set when lights (transistor) are turned on or off;
+// functions check the status of this variable before they change the light status - no need to change the pin value every second.
+
 bool lightStatus = false;
 
-// should lights be turned on or off.
-bool lightsOn;
+// should lights be turned on or off by a function
 
-// Don't think we're using this; belive pins 2+3 are default tx,rx
-//AltSoftSerial gpsPort; // GPS TX to pin 8, GPS RX to pin 9
+bool lightsOn;
 
 static void flickerCandles () 
 {
-  /*analogWrite(ledPin1, random(120)+135);
-  analogWrite(ledPin2, random(120)+135);
-  analogWrite(ledPin3, random(120)+135);
-  analogWrite(ledPin4, random(120)+135);*/
   for (int i=0; i<ledCount; i++) {
-    analogWrite(ledFire[i], random(120)+135);
-    DEBUG_PORT.print( F("I just flickered Pin") );
+    analogWrite(ledFire[i], random(120)+135); // PWM value: 0 (off) - 255 (on)
+    DEBUG_PORT.print( F("I just flickered Pin ") );
     DEBUG_PORT.println(ledFire[i]);
   }
-  DEBUG_PORT.print( F("I just finished the flicker loop") );
-  // do this more elegantly. Function pointer in a for loop for each pin?
+  DEBUG_PORT.println( F("I just finished the flicker loop") );
 }
 
 static void switchDaytimeLight (bool lightsOn)
@@ -78,13 +98,13 @@ static void switchDaytimeLight (bool lightsOn)
     //turn on transistor lights
     digitalWrite(daytimeLights, HIGH); // pull pin high to power transistor
     lightStatus = true;
-    DEBUG_PORT.print( F("Transistor Lights: On") );
+    DEBUG_PORT.println( F("Transistor Lights: On") );
   }
   if (lightsOn == false) {
     //turn off transistor lights
     digitalWrite(daytimeLights, LOW); // pull pin low to cut power to transistor circuit
     lightStatus = false;
-    DEBUG_PORT.print( F("Transistor Lights: Off") );
+    DEBUG_PORT.println( F("Transistor Lights: Off") );
   }
 }
 
@@ -92,20 +112,20 @@ static void killCandles ()
 {
   for (int i=0; i<ledCount; i++) {
     digitalWrite(ledFire[i], LOW); // pull pin low to kill power to LED.
-    DEBUG_PORT.print( F("I just killed power to") );
+    DEBUG_PORT.print( F("I just killed power to ") );
     DEBUG_PORT.println(ledFire[i]);
  }
 }
 
-static void doLights ()
+static void doLights (uint8_t currentHour)
 {
-  uint8_t currentHour = 2; //THIS IS FOR DEBUGGING. Remove to get time from GPS.
+  // currentHour = 2; // THIS IS FOR DEBUGGING - will override the time passed to the function. Comment out to use the time from GPS fix.
   if ( currentHour < sunrise || currentHour >= sunset ) {
-    flickerCandles();
+    flickerCandles(); // only called once per second/loop. May need to increase the rate for a more convincing flicker effect.
     if ( lightStatus == false ) {
       lightsOn = true;
+      DEBUG_PORT.println( F("Lights: On") );
       switchDaytimeLight(lightsOn);
-      DEBUG_PORT.println( F("Turning Lights On") );
     }
     else {
       DEBUG_PORT.println( F("Lights already on") );
@@ -116,29 +136,30 @@ static void doLights ()
       lightsOn = false;
       killCandles();
       switchDaytimeLight (lightsOn);
-      DEBUG_PORT.print( F("Lights: Off") );
+      DEBUG_PORT.println( F("Lights: Off") );
     }
     else {
-      DEBUG_PORT.print( F("Lights already off") );
+      DEBUG_PORT.println( F("Lights already off") );
     }
   }
 }
 
-//----------------------------------------------------------------
-//  This function gets called about once per second, during the GPS
-//  quiet time.  It's the best place to do anything that might take
-//  a while: print a bunch of things, write to SD, send an SMS, etc.
-//
-//  By doing the "hard" work during the quiet time, the CPU can get back to
-//  reading the GPS chars as they come in, so that no chars are lost.
+/*
+ * This function gets called about once per second, during the GPS
+ * quiet time.  It's the best place to do anything that might take
+ * a while: print a bunch of things, write to SD, send an SMS, etc.
+ * 
+ * By doing the "hard" work during the quiet time, the CPU can get back to
+ * reading the GPS chars as they come in, so that no chars are lost.
+*/
 
 static void doSomeWork()
 {
-  //uint8_t currentHour = fix.dateTime.hours;
-  doLights(); // this is called once per second and currently only flickers candles once in that time.
-  trace_all( DEBUG_PORT, gps, fix );
+  uint8_t currentHour = fix.dateTime.hours; // Pull the hour out of the new GPS fix.
+  doLights(currentHour); // Do the light stuff.
+  trace_all( DEBUG_PORT, gps, fix ); // Output GPS Fix info.
 
-} // doSomeWork
+} 
 
 //------------------------------------
 //  This is the main GPS parsing loop.
@@ -154,24 +175,19 @@ static void GPSloop()
 
 void setup()
 {
-  //configure candle flicker pins
-  /*
-  pinMode(ledPin1, OUTPUT);
-  pinMode(ledPin2, OUTPUT);
-  pinMode(ledPin3, OUTPUT);
-  pinMode(ledPin4, OUTPUT);
-  */
-  for (int i=0; i<ledCount; i++) {
-    pinMode(ledFire[i], OUTPUT);
-    DEBUG_PORT.print( F("Set pin to OUTPUT:") );
-    DEBUG_PORT.println(ledFire[i]);
-  }
-  
-  pinMode(daytimeLights, OUTPUT);
-
   DEBUG_PORT.begin(9600);
   while (!DEBUG_PORT)
     ;
+
+  for (int i=0; i<ledCount; i++) { // Configure Fire Effect pins.
+    pinMode(ledFire[i], OUTPUT);
+    DEBUG_PORT.print( F("Fire Effect: Set pin to OUTPUT: ") );
+    DEBUG_PORT.println(ledFire[i]);
+  }
+  
+  pinMode(daytimeLights, OUTPUT); // Configure transistor lights pin.
+  DEBUG_PORT.print( F("Daytime Lights:  Set pin to OUTPUT: ") );
+  DEBUG_PORT.println(daytimeLights);
 
   DEBUG_PORT.print( F("NMEA.INO: started\n") );
   DEBUG_PORT.print( F("  fix object size = ") );
@@ -216,6 +232,7 @@ void setup()
 
   gpsPort.begin( 9600 );
 }
+
 void loop() {
   GPSloop();
 }
